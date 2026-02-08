@@ -3,6 +3,10 @@ Advanced Virtual Mouse Control using Hand Gestures
 Гарын хөдөлгөөнөөр хулганыг удирдах систем - Advanced Edition
 """
 
+import sys
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+
 import cv2
 import mediapipe as mp
 import pyautogui
@@ -94,6 +98,12 @@ class VirtualMouse:
         self.show_advanced_info = True
         self.show_trails = True
         self.trail_points = deque(maxlen=20)
+
+        # Recording settings
+        self.is_recording = False
+        self.video_writer = None
+        self.record_start_time = 0
+        self.record_duration = 5  # 5 sekund
         
         # Color schemes (SIMPLIFIED!)
         self.colors = {
@@ -227,6 +237,7 @@ class VirtualMouse:
         print("  'i' = Toggle info display")
         print("  't' = Toggle trails")
         print("  's' = Save screenshot")
+        print("  'v' = 5 sekund bichleg hiih (VIDEO RECORD)")
         print("  'r' = Reset statistics\n")
         
         print("🎮 NEW SIMPLE GESTURES:")
@@ -399,8 +410,25 @@ class VirtualMouse:
             # Draw compact finger-status overlay (always visible)
             self.draw_finger_status_overlay(frame)
 
+            # Recording logic
+            if self.is_recording:
+                elapsed = time.time() - self.record_start_time
+                remaining = self.record_duration - elapsed
+                if remaining <= 0:
+                    self.is_recording = False
+                    self.video_writer.release()
+                    self.video_writer = None
+                    print(">>> Bichleg duuslaa! Hadgalagdsan.")
+                else:
+                    self.video_writer.write(frame)
+                    cv2.putText(frame, "REC", (cam_width - 90, 40),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
+                    cv2.circle(frame, (cam_width - 105, 33), 8, (0, 0, 255), -1)
+                    cv2.putText(frame, f"{remaining:.1f}s", (cam_width - 90, 70),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
             # Show frame
-            cv2.imshow('Advanced Virtual Mouse - Гарын хулгана', frame)
+            cv2.imshow('Advanced Virtual Mouse - Gariin khulgana', frame)
             
             # Handle keyboard input
             key = cv2.waitKey(1) & 0xFF
@@ -416,18 +444,28 @@ class VirtualMouse:
                 filename = f"screenshot_{int(time.time())}.png"
                 cv2.imwrite(filename, frame)
                 print(f"📸 Screenshot saved: {filename}")
+            elif key == ord('v'):
+                if not self.is_recording:
+                    filename = f"gesture_video_{int(time.time())}.avi"
+                    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+                    self.video_writer = cv2.VideoWriter(filename, fourcc, 20, (cam_width, cam_height))
+                    self.is_recording = True
+                    self.record_start_time = time.time()
+                    print(f">>> 5 sekund bichleg ehellee! File: {filename}")
             elif key == ord('r'):
                 self.reset_statistics()
-                print("🔄 Statistics reset!")
+                print(">>> Statistics reset!")
         
         # Print session summary
         self.print_session_summary()
         
         # Cleanup
+        if self.video_writer is not None:
+            self.video_writer.release()
         self.cap.release()
         cv2.destroyAllWindows()
         self.hands.close()
-        print("\n✅ Virtual Mouse stopped")
+        print("\nVirtual Mouse stopped")
     
     def draw_enhanced_landmarks(self, frame, hand_landmarks):
         """Draw hand landmarks with enhanced visuals"""
